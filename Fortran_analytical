@@ -1,0 +1,362 @@
+	program WD_Z_to_XFeO
+c
+c Program to simulate XFeO distribution and oxygen fugacities from WD stars.
+c Input file should be an ascii text file with the following format (values
+c shown are for WD GD 40 as an example):
+c
+c      -5.6200000        !log(O/X)
+c      0.10000000        !log(O/X)err
+c      -6.4400000        !log(Si/X)
+c      0.30000000        !log(Si/X)err
+c     -6.2000000        !log(Mg/X)
+c      0.16000000        !log(Mg/X)err
+c     -6.9000000        !log(Ca/X)
+c      0.20000000        !log(Ca/X)err
+c     -7.3500000        !log(Al/X)
+c      0.12000000        !log(Al/X)err
+c     -6.4700000        !log(Fe/X)
+c      0.12000000        !log(Fe/X)err
+c
+c where X represnets hydrogen or helium and err is the uncertainty in the
+c measured log(Z/X) value.
+c
+c EDY, UCLA, June 7, 2019
+c
+c
+      implicit double precision (a-h,o-z)
+      parameter (nmax=50000)  !numer of Monte Carlo draws maximum
+c
+      double precision rSi_O(nmax),xSiO2_O,xAl2O3_O,xMgO_O,xCaO_O
+      double precision xFeO_O
+      character*50 file_name,output_file
+      character*3 new_ext
+      integer ppos
+c
+      print*,' '
+      print*,' '
+      print*,' '
+      print*,'+------------------------------------------------+'
+      print*,'|      White Dwarf Element Ratio Calculator      |'
+      print*,'+------------------------------------------------+'
+      print*,' '
+      print*,'Enter input file name:'
+      read(*,6) file_name
+6     format(A)
+      open(unit=10,file=file_name,status='unknown')
+      read(10,*) xlog_O_H
+      read(10,*) xlog_O_H_s
+      read(10,*) xlog_Si_H
+      read(10,*) xlog_Si_H_s
+      read(10,*) xlog_Mg_H
+      read(10,*) xlog_Mg_H_s
+      read(10,*) xlog_Ca_H
+      read(10,*) xlog_Ca_H_s
+      read(10,*) xlog_Al_H
+      read(10,*) xlog_Al_H_s
+      read(10,*) xlog_Fe_H
+      read(10,*) xlog_Fe_H_s
+      close(unit=10)
+      ppos = scan(trim(file_name),".",back=.true.)
+      new_ext="txt"
+      if(ppos.gt.0)output_file=file_name(1:ppos)//new_ext
+c
+c Calculate log(z/O)
+c
+      xlog_O_O=xlog_O_H-xlog_O_H
+      xlog_Si_O=xlog_Si_H-xlog_O_H
+      xlog_Mg_O=xlog_Mg_H-xlog_O_H
+      xlog_Ca_O=xlog_Ca_H-xlog_O_H
+      xlog_Al_O=xlog_Al_H-xlog_O_H
+      xlog_Fe_O=xlog_Fe_H-xlog_O_H
+c
+c Calculate uncertainties in log(Z/O)
+c
+      xlog_O_O_s=0.0D0
+      xlog_Si_O_s=dsqrt(xlog_Si_H_s**2.0 + xlog_O_H_s**2.0)
+      xlog_Mg_O_s=dsqrt(xlog_Mg_H_s**2.0 + xlog_O_H_s**2.0)
+      xlog_Ca_O_s=dsqrt(xlog_Ca_H_s**2.0 + xlog_O_H_s**2.0)
+      xlog_Al_O_s=dsqrt(xlog_Al_H_s**2.0 + xlog_O_H_s**2.0)
+      xlog_Fe_O_s=dsqrt(xlog_Fe_H_s**2.0 + xlog_O_H_s**2.0)
+c
+c Echo results thus far
+c
+      open(unit=12,file=output_file,status='unknown')
+      write(12,10) xlog_O_O, xlog_O_O_s, xlog_Si_O, xlog_Si_O_s,
+     &xlog_Mg_O,xlog_Mg_O_s,xlog_Ca_O,xlog_Ca_O_s,xlog_Al_O,
+     &xlog_Al_O_s, xlog_Fe_O,xlog_Fe_O_s
+10    format(1x,'log(O/O) = ',F10.3,1x,'+/- ',F10.3,/,
+     &      1x,'log(Si/O) = ',F10.3,1x,'+/- ',F10.3,/,  
+     &      1x,'log(Mg/O) = ',F10.3,1x,'+/- ',F10.3,/, 
+     &      1x,'log(Ca/O) = ',F10.3,1x,'+/- ',F10.3,/, 
+     &      1x,'log(Al/O) = ',F10.3,1x,'+/- ',F10.3,/,
+     &      1x,'log(Fe/O) = ',F10.3,1x,'+/- ',F10.3,/)  
+c
+c Calculate Z/H and errors in Z/O
+c  
+      xO_O=10.00D0**xlog_O_O
+      xO_O_s=0.0D0   
+      xSi_O=10.0D0**xlog_Si_O
+      xSi_O_s=xSi_O*dlog(10.0D0)*xlog_Si_H_s
+      xMg_O=10.0D0**xlog_Mg_O
+      xMg_O_s=xMg_O*dlog(10.0D0)*xlog_Mg_H_s
+      xCa_O=10.0D0**xlog_Ca_O
+      xCa_O_s=xCa_O*dlog(10.0D0)*xlog_Ca_H_s
+      xAl_O=10.0D0**xlog_Al_O
+      xAl_O_s=xAl_O*dlog(10.0D0)*xlog_Al_H_s
+      xFe_O=10.0D0**xlog_Fe_O
+      xFe_O_s=xFe_O*dlog(10.0D0)*xlog_Fe_H_s
+c
+c Output ant-log ratios
+c
+      write(12,15) xO_O, xO_O_s, xSi_O, xSi_O_s,
+     &xMg_O,xMg_O_s,xCa_O,xCa_O_s,xAl_O,
+     &xAl_O_s, xFe_O,xFe_O_s
+15    format(1x,'(O/O) = ',E11.5,1x,'+/- ',E11.5,/,
+     &      1x,'(Si/O) = ',E11.5,1x,'+/- ',E11.5,/,  
+     &      1x,'(Mg/O) = ',E11.5,1x,'+/- ',E11.5,/, 
+     &      1x,'(Ca/O) = ',E11.5,1x,'+/- ',E11.5,/, 
+     &      1x,'(Al/O) = ',E11.5,1x,'+/- ',E11.5,/,
+     &      1x,'(Fe/O) = ',E11.5,1x,'+/- ',E11.5,/) 
+c
+c Use the directly calculated Z/O ratios to get the first estimate
+c of excess O left over for bonding with Fe, where excess O is
+c O_xs=1.0-O_bound_to_Z/O_total.  The xSiO2_O etc. below are the
+c number of oxygens associated with the oxides relative to total
+c oxygen. Actual oxide abundances are calculated below. 
+c
+      xSiO2_O=2.0D0*xSi_O
+      xMgO_O=xMg_O
+      xAl2O3_O=(3.0D0/2.0D0)*xAl_O
+      xCaO_O=xCa_O
+      xO_xs=1.0D0-xSiO2_O-xMgO_O-xAl2O3_O-xCaO_O
+c
+c Propagate errors in Z/O to this excess O parameter
+c
+      xO_xs_s=dsqrt(4.0D0*xSi_O_s**2.0+((3.0D0/2.0D0)**2.0)*xAl_O_s**2.0
+     &  +xMg_O_s**2.0+xCa_O_s**2.0)
+c
+c Write excess O/total O to file
+c 
+      write(12,16) xO_xs,xO_xs_s
+16    format(1x,'(O available for FeO)/total O = ',
+     & E12.5,1x,'+/-',E12.5,/)
+c
+c Calculate oxygen tied up as FeO, and assign errors
+c
+      if(xO_xs.lt.(xFe_O-xFe_O_s))then
+         xFeO_O=xO_xs
+         xFeO_O_s=xO_xs_s
+      else
+         xFeO_O=xFe_O
+         xFeO_O_s=xFe_O_s
+      endif
+c
+c Print to file
+c
+      write(12,17) xFeO_O,xFeO_O_s
+17    format(1x,'FeO/O = ',E11.4,1x,'+/-',E11.4,/)
+c
+c Calculate XFeO from the ratio of oxide/O ratios.  These are not the same
+c as the oxygen per oxide calculated above, so are calculated here.  xSiO2
+c means SiO2/O, etc.  FeO_O is FeO/O while xFeO is actual mole fraction,
+c (FeO/O)/(FeO/O+SiO2/O+MgO/O+...), apology for potential confusion. 
+c
+      xSiO2=xSi_O
+      xMgO=xMg_O
+      xAl2O3=0.5*xAl_O
+      xCaO=xCa_O  
+      xFeO=xFeO_O/(xFeO_O+xSiO2+xMgO+xAl2O3+xCaO)
+      oxide_O_sum=xFeO_O+xSiO2+xMgO+xAl2O3+xCaO
+      xSiO2_s=dsqrt(xSi_O_s**2.0)
+      xMgO_s=dsqrt(xMg_O_s**2.0)
+      xCaO_s=dsqrt(xCa_O_s**2.0)
+      xAl2O3_s=dsqrt(((0.5D0)**2.0)*xAl_O_s**2.0)
+      xFeO_s=(((oxide_O_sum-xFeO_O)/oxide_O_sum**2.0)**2)*xFeO_O_s**2.0
+      xFeO_s=xFeO_s+((-xFeO_O/oxide_O_sum**2.0)**2.0)*xSiO2_s**2
+      xFeO_s=xFeO_s+((-xMgO_O/oxide_O_sum**2.0)**2.0)*xMgO_s**2
+      xFeO_s=xFeO_s+((-xAl2O3_O/oxide_O_sum**2.0)**2.0)*xAl2O3_s**2
+      xFeO_s=xFeO_s+((-xCaO_O/oxide_O_sum**2.0)**2.0)*xCaO_s**2
+      xFeO_s=dsqrt(xFeO_s)
+c
+c Calculate oxygen fugacity from FeO mole fraction as DIW, and
+c calculate uncertainty in DIW
+c      
+      
+      DIW = 2.0D0*DLOG10(xFeO/0.85D0)
+      DIW_min=2.0D0*DLOG10((xFeO-xFeO_s)/0.85D0)
+      DIW_max=2.0D0*DLOG10((xFeO+xFeO_s)/0.85D0)
+      DIW_s_p=DIW_max-DIW
+      DIW_s_m=DIW - DIW_min
+c
+c Print to file
+c
+      write(12,18) xFeO,xFeO_s,DIW,DIW_s_p,DIW_s_m,DIW_max,DIW_min
+18    format(1x,'xFeO = ',G10.3,1x,'+/-',G10.3,/,
+     & 1x,'DIW =',G10.3,1x,'+',G10.3,1x,'-',G10.3,/,
+     &     '  DIW plus error  = ',G10.3,/,
+     &     '  DIW minus error = ',G10.3,//)
+c
+      idum=-1
+      call nrand(idum,nmax,xSi_O,xSi_O_s,rSi_O)
+!
+! Calculate a/(a+b+c)
+!
+!      do 20 j=1,nmax
+!       x(j)=a(j)/(a(j)+b(j)+c(j))
+!20    continue
+c
+c
+c
+      close(unit=12)
+      close(unit=15)
+!
+! Close program
+!
+	print*,' '
+	print*,'done: '
+      stop
+      end
+!
+
+!***********************subroutine xmean*******************************
+      subroutine xmean(n,x,avg)
+c
+c Computes the mean of a set of values in array x. Integer n is the 
+c dimension of the array x containing the data to be averaged.
+c
+      integer n
+      double precision x(n),avg
+      rn=dble(n)
+      avg=0.00D0
+      do 10 i=1,n
+        avg=avg+x(i)
+10    continue
+      avg=avg/rn
+      return
+      end
+      
+
+!*************************subroutine stddev*****************************
+      subroutine stddev(n,avg,x,sigma)
+c
+c Computes the standard deviation for a set of values in array x. The
+c integer n is the dimension of the array x containing the data.  
+c The returned standard deviation is in variable sigma.
+c
+      integer n
+      double precision x(n),sigma,avg
+      rn=real(n)
+      sqdiff=0.00
+      do 10 i=1,n
+         sqdiff=sqdiff+(x(i)-avg)**2.0
+10    continue
+      temp=sqdiff/(rn-1.00)
+      sigma=sqrt(temp)
+      return
+      end
+*****************************function ran1************************************
+      function ran1(IDUM)
+c
+c Returns a uniform random deviate between 0.0 and 1.0. Set IDUM to any
+c negative value to initialize or reinitialize the sequence. Routine comes
+c from Numerical Recipes (Press et al. , 1986, p. 196) and is a portable
+c replacement (and improvement over) system routines. 
+c
+      save
+      dimension r(97)
+      parameter (M1=259200,IA1=7141,IC1=54773,RM1=1./M1)
+      parameter (M2=134456,IA2=8121,IC2=28411,RM2=1./M2)
+      parameter (M3=243000,IA3=4561,IC3=51349)
+      data iff /0/
+      if(IDUM.lt.0.or.iff.eq.0)then
+        iff=1
+        IX1=MOD(IC1-IDUM,M1)
+        IX1=MOD(IA1*IX1+IC1,M1)
+        IX2=MOD(IX1,M2)
+        IX1=MOD(IA1*IX1+IC1,M1)
+        IX3=MOD(IX1,M3)
+        do 11 j=1,97
+           IX1=MOD(IA1*IX1+IC1,M1)
+           IX2=MOD(IA2*IX2+IC2,M2)
+           r(j)=(float(IX1)+float(IX2)*RM2)*RM1
+11      continue
+        IDUM=1
+      endif
+      IX1=MOD(IA1*IX1+IC1,M1)
+      IX2=MOD(IA2*IX2+IC2,M2)
+      IX3=MOD(IA3*IX3+IC3,M3)
+      j=1+(97*IX3)/M3
+      if(j.gt.97.or.j.lt.1)pause
+      ran1=r(j)
+      r(j)=(float(IX1)+float(IX2)*RM2)*RM1
+      return
+      end
+***************************subroutine urand***********************************
+      subroutine urand(idum,n,rlow,rhigh,x)
+c-----------------------------------------------------------------------------
+c URAND gives an array of n random numbers x from a uniform distribution
+c with boundaries rlow and rhigh. Random numbers between 0 and 1 are
+c provided by function RAN1. Arguments are:
+c
+c           n     =  number of random ``draws'' from distribution
+c
+c        rlow     =  lower bound of uniform distribution
+c
+c       rhigh     =  upper bound of uniform distribution
+c
+c           x     =  n-dimensional array of random numbers
+c                    drawn from distribution (rlow,rhigh)
+c
+c        idum     =  negative integer to intitialize random number
+c                    generator ran1
+c
+c-----------------------------------------------------------------------------
+      integer n,idum
+      double precision x(n),rlow,rhigh
+      do 10 i=1,n
+         r=ran1(idum)
+         x(i)=dble(r)*(rhigh-rlow)+rlow
+10    continue
+      return
+      end
+***************************subroutine nrand***********************************
+      subroutine nrand(idum,n,rmean,stdev,x)
+c-----------------------------------------------------------------------------
+c NRAND gives an array of n random numbers x from a normal distribution
+c defined by parameters rmean (mean) and stdev (standard deviation). The 
+c routine utiizes function RAN1 to generate random numbers 
+c between 0 and 1. The algorithm for the integrated probability density
+c function for a Gaussian distribution used here is described by Harbaugh
+c and Bonham-Carter (1970, Computer Simulation in Geology, Wiley, p. 69,
+c 82-84).
+c
+c Arguments are:
+c
+c           n     =  number of random ``draws'' from distribution
+c
+c        rmean    =  mean for parent Gaussian distribution
+c
+c        stdev    =  standard deviation for parent Gaussian distribution 
+c
+c           x     =  n-dimensional array of real random numbers
+c                    drawn from distribution (rmean,stdev)
+c
+c         idum    =  negative integer to initialize random number
+c                    generator ran1
+c
+c-----------------------------------------------------------------------------
+      integer n,idum
+      double precision x(n),rlow,rhigh,rsum,stdev,rmean
+      do 10 i=1,n
+         rsum=0.0D0
+         do 5 j=1,12
+            r=dble(ran1(idum))
+            rsum=rsum+r
+5        continue
+         x(i)=(rsum-6.0D0)*stdev+rmean
+10    continue
+      return
+      end
+
+ 	
+
