@@ -1,0 +1,152 @@
+PRO OXYGEN_FUGACITY_WDS_DOYLE_ETAL_2019
+  ;This program uses a Monte Carlo bootstrap draw to calculate 100,000 oxygen fugacities from number abundance element ratios
+  ;depicted in White Dwarf data. It will print the median mole fraction FeO (XFeO) and median fo2, plus the values of each at 1
+  ;standard deviation (16.5% and 83.5%, where the median is 50%).
+  ;
+  ;The input file can be a .txt file with log abundances (as reported in literature, ratioed to H or He) and the dex error. The last row of the
+  ;input file is the average amount of Fe in the metal core that you would like to assume (we assume 0.85 in Doyle et al. 2019).
+  ;
+  ;A.Doyle August 2018
+
+  MedianCount = 0.0
+  TotalCount = 0.0
+
+  REPEAT BEGIN
+    File = '/INPUT_FILE/'
+    nrows = FILE_LINES(File)
+    Array = DBLARR(nrows)
+    GET_LUN, U
+    OPENR, U, File
+    READF, U, Array
+    FREE_LUN,U
+
+    ;The following represents the order of data from the uploaded file, data is taken as log number abundance ratioed to either H or He depending on the WD
+    logAlX = Array(0)
+    errlogAlX = Array(1)
+    logCaX = Array(2)
+    errlogCaX = Array(3)
+    logMgX = Array(4)
+    errlogMgX = Array(5)
+    logSiX = Array(6)
+    errlogSiX = Array(7)
+    logFeX = Array(8)
+    errlogFeX = Array(9)
+    logOX = Array(10)
+    errlogOX = Array(11)
+    AvgFeCore = Array(12)
+
+    ;*****************************************************Monte Carlo draw of Gaussian***********************************************
+    N = 1
+
+    SiRand = RANDOMN(iseed, N)
+    SiDistribution = SiRand * errlogSiX + logSiX
+
+    MgRand = RANDOMN(iseed, N)
+    MgDistribution = MgRand * errlogMgX + logMgX
+
+    AlRand = RANDOMN(iseed, N)
+    AlDistribution = AlRand * errlogAlX + logAlX
+
+    CaRand = RANDOMN(iseed, N)
+    CaDistribution = CaRand * errlogCaX + logCaX
+
+    ORand = RANDOMN(iseed, N)
+    ODistribution = ORand * errlogOX + logOX
+
+    FeRand = RANDOMN(iseed, N)
+    FeDistribution = FeRand * errlogFeX + logFeX
+
+
+    ;*********************************************************Ratio to oxygen********************************************************
+    logAlO = (AlDISTRIBUTION) - (ODISTRIBUTION)
+    logCaO = (CaDISTRIBUTION) - (ODISTRIBUTION)
+    logMgO = (MgDISTRIBUTION) - (ODISTRIBUTION)
+    logSiO = (SiDISTRIBUTION) - (ODISTRIBUTION)
+    logFeO = (FeDISTRIBUTION) - (ODISTRIBUTION)
+    logOO = (ODISTRIBUTION) - (ODISTRIBUTION)
+
+    AlX = 10^(logAlO)
+    CaX = 10^(logCaO)
+    MgX = 10^(logMgO)
+    SiX = 10^(logSiO)
+    FeX = 10^(logFeO)
+    OX = 10^(logOO)
+
+    ;****************************************Oxygen balancing and trapping negative FeO values**************************************
+    LeftO = OX - (MgX + (2*SiX) + (3*AlX/2) + CaX)
+    LeftFe = FeX - LeftO
+
+    FeO = DBLARR(LeftFe.length)
+
+    FOREACH line, FINDGEN(N_ELEMENTS(LeftFe[*])) DO BEGIN
+      IF LeftO[line] GE FeX[line] THEN BEGIN
+        FeO[line] = FeX[line]
+        LeftFe[line] = LeftFe[line]
+
+      ENDIF
+      ;FeO is set to 0.0D0 when LeftO is LE 0.0D0. This traps FeO to not be negative in cases where there are large uncertainties in O.
+      IF LeftO[line] LE 0.0D0 THEN BEGIN
+        FeO[line] = 0.0D0
+        LeftFe[line] = FeX[line]
+      ENDIF
+      IF (0.0D0 LT LeftO[line] AND LeftO[line] LT FeX[line]) THEN BEGIN
+        FeO[line] = LeftO[line]
+      ENDIF
+    ENDFOREACH
+
+    ;************************************************************Renaming***************************************************************
+    MetalFe = LeftFe ;Metal Fe
+    FullFe = FeX
+    FeO = FeO
+    Oxidize = LeftO
+    Al2O3 = AlX ;Al2O3
+    CaO = CaX ;CaO
+    MgO = MgX ;MgO
+    SiO2 = SiX  ;SiO2
+
+    ;************************************************Calculating Mole Fraction FeO in Mantle*******************************************
+    XFeO = FeO/(FeO + Al2O3 + CaO + MgO + SiO2)
+
+    ;*****************************************Importing Greek symbols from IDLCoyote Program*******************************************
+    delta = "104B
+    greek = '!9' + STRING(delta) + '!X'
+
+    ;***********************************************Saving Data, calculating median fo2************************************************
+    MedianXFeO = MEDIAN(XFeO)
+    Medianfo2 = 2*ALOG10(MedianXFeO/AvgFeCore)
+
+    TotalCount = TotalCount + 1
+
+    IF FINITE(Medianfo2) NE 0  THEN BEGIN
+      MedianCount = MedianCount + 1.0
+      IF MedianCount MOD 1.0D4 EQ 0 THEN BEGIN
+        PRINT, MedianCount
+      ENDIF
+      OPENU, 1, '/FILE_NAME/', /APPEND
+      PRINTF,1, MedianXFeO
+      CLOSE, 1
+
+    ENDIF
+
+  ENDREP UNTIL MedianCount EQ 99999.0
+  PRINT, TotalCount
+
+  File = '/FILE_NAME/'
+  nrows = FILE_LINES(File)
+  XFeO = DBLARR(nrows)
+  GET_LUN, U
+  OPENR, U, File
+  READF, U, XFeO
+  FREE_LUN,U
+
+  !path = EXPAND_PATH('+~/IDLWorkspace/coyote/') + ':' + !path
+
+  ;*********************************************************Printing Results*********************************************************
+  PRINT, 'Median XFeO = ',  CGPERCENTILES(XFeO, Percentiles = [0.5])
+  PRINT, '16.5% XFeO value = ', CGPERCENTILES(XFeO, Percentiles = [0.165])
+  PRINT, '83.5% XFeO value = ', CGPERCENTILES(XFeO, Percentiles = [0.835])
+
+  PRINT, 'Median fo2 = ',  2*ALOG10((CGPERCENTILES(XFeO, Percentiles = [0.5]))/AvgFeCore)
+  PRINT, '16.5% fo2 value = ', 2*ALOG10((CGPERCENTILES(XFeO, Percentiles = [0.165]))/AvgFeCore)
+  PRINT, '83.5% fo2 value = ', 2*ALOG10((CGPERCENTILES(XFeO, Percentiles = [0.835]))/AvgFeCore)
+END
